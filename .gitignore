@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Env / secrets
+.env
+*.env.local
+
+# DB
+*.sqlite3
+pgdata/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Data (large/raw pulled files, keep sample only)
+data_ingestion/raw/
+*.csv
+!data_ingestion/sample_data/*.csv
