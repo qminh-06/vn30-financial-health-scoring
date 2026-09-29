@@ -1,8 +1,5 @@
 """RAG Retriever — production module cho FastAPI pipeline.
 
-Cung cấp context tài chính (ngưỡng ngành, PDF báo cáo, lịch sử ratios từ DB)
-cho LLM bằng cách retrieve từ pgvector.
-
 Cách dùng trong ai_analysis/analyze.py:
     from RAG.rag_retriever import build_rag_context, RAG_VERSION
 
@@ -29,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 RAG_VERSION = "v1"
 
-# ---------------------------------------------------------------------------
 # Lazy-loaded singletons — khởi tạo một lần khi FastAPI nhận request đầu tiên
 # ---------------------------------------------------------------------------
 _retriever: VectorStoreRetriever | None = None
@@ -140,7 +136,6 @@ def _build_context_block(docs: list, cfg: RAGConfig) -> str:
     return p.chunk_separator.join(sections)
 
 
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
