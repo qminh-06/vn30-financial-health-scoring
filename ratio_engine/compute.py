@@ -1,6 +1,10 @@
-vnstock import Finance
+from vnstock import Finance
 from vnstock import register_user
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
+
+from db.supabase_loader import seed_all, insert_ratios, insert_financial_details
 
 register_user()
 
@@ -72,6 +76,7 @@ def compute_asset_structure(balance_sheet, period):
     structure["earning_assets_ratio_%"] = round(earning_assets / total_assets * 100, 2)
     return structure
 
+seed_all(bank_name, PERIODS, ASSET_ITEMS)
 all_rows = []
 
 for symbol in BANK_SYMBOLS:
@@ -145,8 +150,7 @@ for symbol in BANK_SYMBOLS:
                                                                             + get_value(balance_sheet, "deposits_and_loans_from_other_credit_institutions", period)
                                                                             + get_value(balance_sheet, "deposits_from_customers", period)
                                                                             + get_value(balance_sheet, "convertible_bonds_cds_and_other_valuable_papers_issued", period)) * 100
-
-        print(f"{period}: ETA={eta:.2f}%, Equity/Deposits={equity_to_deposits:.2f}%, "f"Growth_qoq={'N/A' if growth_qoq is None else f'{growth_qoq:.2f}%'}, "f"Accrued Interest={accrued_interest:.2f}%, CIR={cir:.2f}%, ROA={roa:.2f}%, ROE={roe:.2f}%, NIM={nim:.2f}%, YOEA={yoea:.2f}%, COF={cof:.2f}%")
+        print(f"{period}: ETA={eta:.2f}%, Equity/Deposits={equity_to_deposits:.2f}%, "f"Growth_qoq={'N/A' if growth_qoq is None else f'{growth_qoq:.2f}%'}, "f"Accrued Interest={accrued_interest:.2f}%, CIR={cir:.2f}%, ROA={roa:.2f}%, ROE={roe:.2f}%, "f"NIM={'N/A' if nim is None else f'{nim:.2f}%'}, YOEA={'N/A' if yoea is None else f'{yoea:.2f}%'}, COF={cof:.2f}%")
         all_rows.append({
             "symbol": symbol,
             "period": period,
@@ -163,6 +167,8 @@ for symbol in BANK_SYMBOLS:
             "COF_%": round(cof, 2),
             **{f"{k}": v for k, v in asset_structure.items()},
         })
+insert_ratios(all_rows)
+insert_financial_details(all_rows)
 
 result_df = pd.DataFrame(all_rows)
 result_df.to_csv("bank_metrics_13_banks.csv", index=False, encoding="utf-8-sig")

@@ -1,0 +1,147 @@
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+from supabase import create_client
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
+
+# KET NOI (lazy - chi tao client khi lan dau can dung, khong tao ngay luc import)
+_supabase_client = None
+
+
+def _normalize_url(url: str) -> str:
+    url = url.strip().strip('"').strip("'").rstrip("/")
+    for suffix in ("/rest/v1", "/auth/v1", "/storage/v1"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)]
+    return url
+
+def get_client():
+    global _supabase_client
+    if _supabase_client is None:
+        raw_url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        if not raw_url or not key:
+            raise RuntimeError(
+                "Thieu SUPABASE_URL hoac SUPABASE_SERVICE_ROLE_KEY. "
+                "Kiem tra file .env co nam o thu muc goc project (ngang hang "
+                "voi db/ va ratio_engine/) va co dung 2 bien nay khong."
+            )
+        url = _normalize_url(raw_url)
+        _supabase_client = create_client(url, key)
+    return _supabase_client
+
+
+class _LazyClient:
+    def __getattr__(self, name):
+        return getattr(get_client(), name)
+
+supabase = _LazyClient()
+
+# DANH MUC CO DINH (seed 1 lan)
+
+RATIO_CATALOG = [
+    {"ratio_code": "ETA",         "ratio_name_vn": "VCSH/Tổng tài sản",        "unit": "%", "category": "CAPITAL_ADEQUACY", "source_type": "BCTC"},
+    {"ratio_code": "EQ_DEPOSIT",  "ratio_name_vn": "VCSH/Tổng tiền gửi",       "unit": "%", "category": "CAPITAL_ADEQUACY", "source_type": "BCTC"},
+    {"ratio_code": "GROWTH_QOQ",  "ratio_name_vn": "Tăng trưởng TTS QoQ",      "unit": "%", "category": "ASSET_QUALITY",    "source_type": "BCTC"},
+    {"ratio_code": "ACCRUED_INT", "ratio_name_vn": "Lãi dự thu/Tổng tài sản",  "unit": "%", "category": "ASSET_QUALITY",    "source_type": "BCTC"},
+    {"ratio_code": "CIR",         "ratio_name_vn": "Chi phí/Thu nhập",         "unit": "%", "category": "EFFICIENCY",       "source_type": "BCTC"},
+    {"ratio_code": "ROA",         "ratio_name_vn": "ROA",                     "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "ROE",         "ratio_name_vn": "ROE",                     "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "NIM",         "ratio_name_vn": "NIM",                     "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "YOEA",        "ratio_name_vn": "YOEA",                    "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "COF",         "ratio_name_vn": "COF",                     "unit": "%", "category": "FUNDING",          "source_type": "BCTC"},
+    {"ratio_code": "EARNING_ASSET_RATIO", "ratio_name_vn": "Tài sản sinh lời/TTS", "unit": "%", "category": "ASSET_QUALITY", "source_type": "BCTC"},
+]
+
+# Map ten cot trong all_rows (compute.py) -> ratio_code trong dim_ratio_master
+COLUMN_TO_RATIO_CODE = {
+    "ETA_%": "ETA",
+    "equity_to_deposits_%": "EQ_DEPOSIT",
+    "growth_qoq_%": "GROWTH_QOQ",
+    "accrued_interest_%": "ACCRUED_INT",
+    "cost_to_income_%": "CIR",
+    "ROA_%": "ROA",
+    "ROE_%": "ROE",
+    "NIM_%": "NIM",
+    "YOEA_%": "YOEA",
+    "COF_%": "COF",
+    "earning_assets_ratio_%": "EARNING_ASSET_RATIO",
+}
+# SEED (chay 1 lan, hoac moi khi them ma/chi so moi)
+def seed_banks(bank_name: dict):
+    rows = [{"symbol": s, "bank_name": name} for s, name in bank_name.items()]
+    supabase.table("dim_bank_master").upsert(rows, on_conflict="symbol").execute()
+
+def seed_periods(periods: list):
+    rows = []
+    for p in periods:
+        year, q = p.split("-Q")
+        rows.append({
+            "period_id": p, "period_name": p,
+            "year": int(year), "quarter": int(q),
+            "period_type": "QUARTERLY",
+        })
+    supabase.table("dim_period").upsert(rows, on_conflict="period_id").execute()
+
+
+def seed_ratio_catalog():
+    supabase.table("dim_ratio_master").upsert(RATIO_CATALOG, on_conflict="ratio_code").execute()
+
+
+def seed_line_items(asset_items: list):
+    rows = [
+        {"item_code": i, "item_name_vn": i, "statement_type": "BS", "category": "ASSET"}
+        for i in asset_items + ["total_assets"]
+    ]
+    supabase.table("dim_financial_line_item").upsert(rows, on_conflict="item_code").execute()
+
+
+def seed_all(bank_name: dict, periods: list, asset_items: list):
+    """Goi 1 lan duy nhat truoc khi insert fact lan dau."""
+    seed_banks(bank_name)
+    seed_periods(periods)
+    seed_ratio_catalog()
+    seed_line_items(asset_items)
+    print("Seed xong: dim_bank_master, dim_period, dim_ratio_master, dim_financial_line_item")
+
+# LOAD FACT (chay moi lan co du lieu moi)
+def _batch_insert(table_name: str, rows: list, batch_size: int = 500):
+    for i in range(0, len(rows), batch_size):
+        supabase.table(table_name).insert(rows[i:i + batch_size]).execute()
+
+def insert_ratios(all_rows: list):
+    """all_rows: list dict tu compute.py (wide format) -> chuyen sang long format."""
+    fact_rows = []
+    for row in all_rows:
+        for col, ratio_code in COLUMN_TO_RATIO_CODE.items():
+            value = row.get(col)
+            if value is None:
+                continue
+            fact_rows.append({
+                "symbol": row["symbol"],
+                "period_id": row["period"],
+                "report_type": "CONSOLIDATED",
+                "is_forecast": False,
+                "ratio_code": ratio_code,
+                "ratio_value": value,
+            })
+    _batch_insert("fact_computed_ratios", fact_rows)
+    print(f"Da insert {len(fact_rows)} dong vao fact_computed_ratios")
+
+
+def insert_financial_details(all_rows: list):
+    """Insert total_assets (gia tri tuyet doi) vao fact_financial_statement_details."""
+    fact_rows = [
+        {
+            "symbol": row["symbol"],
+            "period_id": row["period"],
+            "report_type": "CONSOLIDATED",
+            "is_forecast": False,
+            "item_code": "total_assets",
+            "amount": row["total_assets"],
+        }
+        for row in all_rows
+    ]
+    _batch_insert("fact_financial_statement_details", fact_rows)
+    print(f"Da insert {len(fact_rows)} dong vao fact_financial_statement_details")
