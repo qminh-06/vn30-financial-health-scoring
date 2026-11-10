@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -16,6 +17,7 @@ def _normalize_url(url: str) -> str:
             url = url[: -len(suffix)]
     return url
 
+
 def get_client():
     global _supabase_client
     if _supabase_client is None:
@@ -27,8 +29,7 @@ def get_client():
                 "Kiem tra file .env co nam o thu muc goc project (ngang hang "
                 "voi db/ va ratio_engine/) va co dung 2 bien nay khong."
             )
-        url = _normalize_url(raw_url)
-        _supabase_client = create_client(url, key)
+        _supabase_client = create_client(_normalize_url(raw_url), key)
     return _supabase_client
 
 
@@ -68,6 +69,9 @@ COLUMN_TO_RATIO_CODE = {
     "COF_%": "COF",
     "earning_assets_ratio_%": "EARNING_ASSET_RATIO",
 }
+STATEMENT_TYPES = {"balance_sheet": "BS", "income_statement": "IS", "cash_flow": "CF"}
+RATIO_CONFLICT = "symbol,period_id,report_type,is_forecast,ratio_code"
+STATEMENT_CONFLICT = "symbol,period_id,report_type,is_forecast,item_code"
 # SEED (chay 1 lan, hoac moi khi them ma/chi so moi)
 def seed_banks(bank_name: dict):
     rows = [{"symbol": s, "bank_name": name} for s, name in bank_name.items()]
@@ -89,26 +93,38 @@ def seed_ratio_catalog():
     supabase.table("dim_ratio_master").upsert(RATIO_CATALOG, on_conflict="ratio_code").execute()
 
 
-def seed_line_items(asset_items: list):
-    rows = [
-        {"item_code": i, "item_name_vn": i, "statement_type": "BS", "category": "ASSET"}
-        for i in asset_items + ["total_assets"]
-    ]
-    supabase.table("dim_financial_line_item").upsert(rows, on_conflict="item_code").execute()
+def _clean(df):
+    """Bo item_id trung (giu dong dau = dong chinh) va dong khong co item_id."""
+    return df.dropna(subset=["item_id"]).drop_duplicates(subset="item_id", keep="first")
+
+def seed_line_items_from_statements(statements: dict):
+    """statements = {"balance_sheet": df, "income_statement": df, "cash_flow": df}.
+    Seed dim_financial_line_item thang tu DataFrame cua vnstock (item / item_en / item_id)."""
+    rows = {}
+    for name, df in statements.items():
+        for order, r in enumerate(_clean(df).itertuples(index=False)):
+            rows.setdefault(r.item_id, {
+                "item_code": r.item_id,
+                "item_name_vn": r.item,
+                "item_name_en": r.item_en,
+                "statement_type": STATEMENT_TYPES[name],
+                "display_order": order,
+            })
+    supabase.table("dim_financial_line_item").upsert(
+        list(rows.values()), on_conflict="item_code").execute()
+    print(f"Seed {len(rows)} dong vao dim_financial_line_item")
 
 
-def seed_all(bank_name: dict, periods: list, asset_items: list):
-    """Goi 1 lan duy nhat truoc khi insert fact lan dau."""
+def seed_all(bank_name: dict, periods: list):
     seed_banks(bank_name)
     seed_periods(periods)
     seed_ratio_catalog()
-    seed_line_items(asset_items)
-    print("Seed xong: dim_bank_master, dim_period, dim_ratio_master, dim_financial_line_item")
+    print("Seed xong: dim_bank_master, dim_period, dim_ratio_master")
+# LOAD FACT (chay moi lan co du lieu moi) - upsert, chay lai nhieu lan khong loi
 
-# LOAD FACT (chay moi lan co du lieu moi)
-def _batch_insert(table_name: str, rows: list, batch_size: int = 500):
+def _batch_upsert(table_name: str, rows: list, on_conflict: str, batch_size: int = 500):
     for i in range(0, len(rows), batch_size):
-        supabase.table(table_name).insert(rows[i:i + batch_size]).execute()
+        supabase.table(table_name).upsert(rows[i:i + batch_size], on_conflict=on_conflict).execute()
 
 def insert_ratios(all_rows: list):
     """all_rows: list dict tu compute.py (wide format) -> chuyen sang long format."""
@@ -126,22 +142,33 @@ def insert_ratios(all_rows: list):
                 "ratio_code": ratio_code,
                 "ratio_value": value,
             })
-    _batch_insert("fact_computed_ratios", fact_rows)
-    print(f"Da insert {len(fact_rows)} dong vao fact_computed_ratios")
+    _batch_upsert("fact_computed_ratios", fact_rows, RATIO_CONFLICT)
+    print(f"Da upsert {len(fact_rows)} dong vao fact_computed_ratios")
 
 
-def insert_financial_details(all_rows: list):
-    """Insert total_assets (gia tri tuyet doi) vao fact_financial_statement_details."""
-    fact_rows = [
-        {
-            "symbol": row["symbol"],
-            "period_id": row["period"],
-            "report_type": "CONSOLIDATED",
-            "is_forecast": False,
-            "item_code": "total_assets",
-            "amount": row["total_assets"],
-        }
-        for row in all_rows
-    ]
-    _batch_insert("fact_financial_statement_details", fact_rows)
-    print(f"Da insert {len(fact_rows)} dong vao fact_financial_statement_details")
+def insert_all_statement_lines(symbol: str, statements: dict, periods: list):
+    unique_rows = {}
+    for name, df in statements.items():
+        df = _clean(df)
+        for period in periods:
+            if period not in df.columns:
+                continue
+            for item_id, amount in zip(df["item_id"], df[period]):
+                if pd.isna(amount):
+                    continue
+                key = (period, item_id)
+                if key in unique_rows:
+                    if unique_rows[key]["amount"] != float(amount):
+                        print(f"  [canh bao] {symbol} {period} {item_id}: gia tri khac nhau giua "f"cac bao cao, giu ban dau tien")
+                    continue
+                unique_rows[key] = {
+                    "symbol": symbol,
+                    "period_id": period,
+                    "report_type": "CONSOLIDATED",
+                    "is_forecast": False,
+                    "item_code": item_id,
+                    "amount": float(amount),
+                }
+    fact_rows = list(unique_rows.values())
+    _batch_upsert("fact_financial_statement_details", fact_rows, STATEMENT_CONFLICT)
+    print(f"{symbol}: upsert {len(fact_rows)} dong vao fact_financial_statement_details")

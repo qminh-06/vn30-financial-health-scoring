@@ -4,7 +4,12 @@ import pandas as pd
 from dotenv import load_dotenv
 load_dotenv()
 
-from db.supabase_loader import seed_all, insert_ratios, insert_financial_details
+from db.supabase_loader import (
+    seed_all,
+    seed_line_items_from_statements,
+    insert_ratios,
+    insert_all_statement_lines,
+)
 
 register_user()
 
@@ -76,7 +81,7 @@ def compute_asset_structure(balance_sheet, period):
     structure["earning_assets_ratio_%"] = round(earning_assets / total_assets * 100, 2)
     return structure
 
-seed_all(bank_name, PERIODS, ASSET_ITEMS)
+seed_all(bank_name, PERIODS)
 all_rows = []
 
 for symbol in BANK_SYMBOLS:
@@ -85,10 +90,18 @@ for symbol in BANK_SYMBOLS:
         finance = Finance(symbol=symbol, source="VCI")
         balance_sheet = finance.balance_sheet(period="quarter")
         income_statement = finance.income_statement(period="quarter")
+        cash_flow = finance.cash_flow(period="quarter")
     except Exception as e:
         print(f"LOI khi lay du lieu {symbol}: {e}")
         continue
 
+    statements = {
+        "balance_sheet": balance_sheet,
+        "income_statement": income_statement,
+        "cash_flow": cash_flow,
+    }
+    seed_line_items_from_statements(statements)
+    insert_all_statement_lines(symbol, statements, PERIODS)
     for i, period in enumerate(PERIODS):
         owners_equity = get_value(balance_sheet, "owners_equity", period)
         total_assets = get_value(balance_sheet, "total_assets", period)
@@ -114,7 +127,7 @@ for symbol in BANK_SYMBOLS:
         accrued_interest = get_value(balance_sheet, "accrued_interest_and_fee_receivables", period)/total_assets * 100
 
         # C1
-        cir = get_value(income_statement, "general_and_admin_expenses", period) / get_value(income_statement, "total_operating_income", period) * 100
+        cir = abs(get_value(income_statement, "general_and_admin_expenses", period)) / get_value(income_statement, "total_operating_income", period) * 100
 
         # D1
         roa = get_value(income_statement, "net_profit_loss_after_tax", period) / total_assets * 100
@@ -146,7 +159,7 @@ for symbol in BANK_SYMBOLS:
             yoea = None
 
         # D5
-        cof = get_value(income_statement, "interest_and_similar_expenses", period) / (get_value(balance_sheet, "due_to_gov_and_loans_from_sbv", period)
+        cof = abs(get_value(income_statement, "interest_and_similar_expenses", period)) / (get_value(balance_sheet, "due_to_gov_and_loans_from_sbv", period)
                                                                             + get_value(balance_sheet, "deposits_and_loans_from_other_credit_institutions", period)
                                                                             + get_value(balance_sheet, "deposits_from_customers", period)
                                                                             + get_value(balance_sheet, "convertible_bonds_cds_and_other_valuable_papers_issued", period)) * 100
@@ -168,7 +181,6 @@ for symbol in BANK_SYMBOLS:
             **{f"{k}": v for k, v in asset_structure.items()},
         })
 insert_ratios(all_rows)
-insert_financial_details(all_rows)
 
 result_df = pd.DataFrame(all_rows)
 result_df.to_csv("bank_metrics_13_banks.csv", index=False, encoding="utf-8-sig")
