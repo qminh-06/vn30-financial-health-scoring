@@ -1,97 +1,169 @@
-"""PRODUCTION entrypoint (Phase 2).
+"""PRODUCTION entrypoint — FastAPI Backend for Banking Financial Health Scoring.
 
-This is the only module that gets deployed. It only imports the
-already-decided pipeline pieces:
-
-    ratio_engine  -> pure math, always safe to run live
-    scoring       -> uses the SCORING_VERSION frozen after Phase-1 tuning
-    ai_analysis   -> uses the PROMPT_VERSION frozen after Phase-1 tuning
-
-Run locally:
-    uvicorn app.main:app --reload
+Cung cấp các API:
+1. GET  /health: Liveness check.
+2. GET  /banks: Danh sách ngân hàng trong hệ thống.
+3. GET  /periods: Danh sách kỳ báo cáo có dữ liệu.
+4. GET  /banks/{symbol}/ratios: Lấy chỉ số và điểm sức khỏe của ngân hàng.
+5. POST /analyze: Phân tích sức khỏe ngân hàng (chấm điểm + AI Explanation).
+6. GET  /ranking: Bảng xếp hạng sức khỏe tài chính các ngân hàng trong 1 kỳ.
 """
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 
-from ratio_engine.compute import StatementInput, compute_all_ratios
-from scoring.score import compute_financial_health_score, SCORING_VERSION
-from ai_analysis.analyze import analyze, PROMPT_VERSION
-
-app = FastAPI(
-    title="VN30 Financial Health Scoring API",
-    description="Production API — serves ratios, score and AI explanation "
-                 "for a given company/year using the versions frozen in Phase 1.",
-    version="1.0.0",
+from scoring.score import compute_bank_health_score, SCORING_VERSION
+from ai_analysis.analyze import analyze_bank, PROMPT_VERSION
+from db.supabase_reader import (
+    get_bank_ratios_by_period,
+    get_bank_ratios_history,
+    get_peer_comparison,
+    get_available_banks,
+    get_available_periods,
 )
 
-class StatementRequest(BaseModel):
-    ticker: str
-    year: int
-    revenue: float
-    net_profit: float
-    total_assets: float
-    total_liabilities: float
-    total_equity: float
-    current_assets: float
-    current_liabilities: float
-    cash_from_operations: float
+app = FastAPI(
+    title="VN30 Banking Financial Health Scoring API",
+    description="Hệ thống chấm điểm sức khỏe tài chính và phân tích xu hướng cho nhóm ngân hàng VN30.",
+    version="2.0.0",
+)
 
 
-class HealthReportResponse(BaseModel):
-    ticker: str
-    year: int
-    ratios: dict
-    score: dict
-    ai_explanation: dict | None
-    versions: dict
+class BankAnalysisRequest(BaseModel):
+    symbol: str = Field(..., description="Mã ngân hàng (ví dụ: VCB, MBB, CTG...)")
+    period_id: str = Field(..., description="Kỳ báo cáo cần phân tích (ví dụ: 2026-Q2)")
+    include_ai: bool = Field(True, description="Có gọi AI để sinh báo cáo giải thích hay không")
+
+
+class BankHealthResponse(BaseModel):
+    symbol: str
+    period_id: str
+    ratios: Dict[str, float]
+    score: Dict[str, Any]
+    ai_explanation: Optional[Dict[str, Any]] = None
+    versions: Dict[str, str]
+    disclaimer: str = (
+        "Thông tin chỉ mang tính chất tham khảo học thuật/nghiên cứu, "
+        "không phải là lời khuyên hay khuyến nghị đầu tư cá nhân hóa."
+    )
 
 
 @app.get("/health")
 def health_check():
-    """Basic liveness check for Render/Railway."""
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
-@app.post("/analyze", response_model=HealthReportResponse)
-def analyze_company(payload: StatementRequest, include_ai: bool = True):
-    """Main production endpoint — B2 + Scoring (+ optional B3 AI explanation).
-    include_ai=False lets the frontend fetch the deterministic score instantly
-    and fill in the AI explanation asynchronously, since the Gemini call is
-    the slowest and least reliable step.
-    """
-    statement = StatementInput(
-        revenue=payload.revenue,
-        net_profit=payload.net_profit,
-        total_assets=payload.total_assets,
-        total_liabilities=payload.total_liabilities,
-        total_equity=payload.total_equity,
-        current_assets=payload.current_assets,
-        current_liabilities=payload.current_liabilities,
-        cash_from_operations=payload.cash_from_operations,
-    )
+@app.get("/banks")
+def list_banks():
+    """Lấy danh sách các mã ngân hàng hiện có."""
+    banks = get_available_banks()
+    return {"banks": banks}
 
-    try:
-        ratios = compute_all_ratios(statement)
-    except ZeroDivisionError:
-        raise HTTPException(status_code=422, detail="Invalid input: a denominator is zero.")
 
-    score = compute_financial_health_score(ratios)
+@app.get("/periods")
+def list_periods():
+    """Lấy danh sách các quý tài chính có sẵn trong DB."""
+    periods = get_available_periods()
+    return {"periods": periods}
 
+
+@app.get("/banks/{symbol}/ratios")
+def get_bank_ratios(symbol: str, period_id: str = Query(..., description="Ví dụ: 2026-Q2")):
+    """Lấy chỉ số và điểm sức khỏe tài chính nhanh của một ngân hàng trong một quý."""
+    symbol = symbol.upper()
+    ratios = get_bank_ratios_by_period(symbol, period_id)
+    if not ratios:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không tìm thấy dữ liệu chỉ số cho ngân hàng {symbol} trong kỳ {period_id}",
+        )
+    score = compute_bank_health_score(ratios)
+    return {
+        "symbol": symbol,
+        "period_id": period_id,
+        "ratios": ratios,
+        "score": score,
+    }
+
+
+@app.post("/analyze", response_model=BankHealthResponse)
+def analyze_bank_endpoint(payload: BankAnalysisRequest):
+    """Phân tích toàn diện: Tính điểm sức khỏe và gọi AI phân tích xu hướng."""
+    symbol = payload.symbol.upper()
+    period_id = payload.period_id
+
+    # 1. Đọc dữ liệu từ Supabase
+    ratios = get_bank_ratios_by_period(symbol, period_id)
+    if not ratios:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không tìm thấy dữ liệu tài chính cho {symbol} tại kỳ {period_id}. Hãy kiểm tra xem pipeline compute.py đã chạy chưa.",
+        )
+
+    # 2. Chấm điểm sức khỏe tài chính bằng thuật toán
+    score = compute_bank_health_score(ratios)
+
+    # 3. Phân tích AI (tùy chọn)
     ai_explanation = None
-    if include_ai:
+    if payload.include_ai:
         try:
-            ai_explanation = analyze({str(payload.year): ratios})
-        except ValueError:
-            # AI call failed or returned malformed JSON — degrade gracefully,
-            # the deterministic score/ratios are still fully valid.
-            ai_explanation = {"error": "AI explanation unavailable, showing score only."}
+            # Lấy chuỗi lịch sử 4-8 quý gần nhất để AI nhìn được xu hướng
+            history_df = get_bank_ratios_history(symbol)
+            if not history_df.empty:
+                history_dict = history_df.to_dict(orient="index")
+            else:
+                history_dict = {period_id: ratios}
 
-    return HealthReportResponse(
-        ticker=payload.ticker,
-        year=payload.year,
+            ai_explanation = analyze_bank(symbol=symbol, ratios_history=history_dict)
+        except Exception as e:
+            ai_explanation = {
+                "error": f"Không thể lấy phân tích AI: {str(e)}",
+                "trend_prediction": "N/A",
+                "risk_prediction": "N/A",
+                "profitability_prediction": "N/A",
+            }
+
+    return BankHealthResponse(
+        symbol=symbol,
+        period_id=period_id,
         ratios=ratios,
         score=score,
         ai_explanation=ai_explanation,
         versions={"scoring_version": SCORING_VERSION, "prompt_version": PROMPT_VERSION},
     )
+
+
+@app.get("/ranking")
+def get_banking_ranking(period_id: str = Query(..., description="Kỳ báo cáo xếp hạng, ví dụ: 2026-Q2")):
+    """Bảng xếp hạng sức khỏe tài chính của toàn bộ ngân hàng trong kỳ."""
+    peer_df = get_peer_comparison(period_id)
+    if peer_df.empty:
+        raise HTTPException(status_code=404, detail=f"Chưa có dữ liệu so sánh cho kỳ {period_id}")
+
+    ranking = []
+    for symbol, row in peer_df.iterrows():
+        ratios_dict = row.dropna().to_dict()
+        if not ratios_dict:
+            continue
+        score_res = compute_bank_health_score(ratios_dict)
+        ranking.append({
+            "symbol": symbol,
+            "financial_health_score": score_res["financial_health_score"],
+            "capital_adequacy_score": score_res["capital_adequacy_score"],
+            "asset_quality_score": score_res["asset_quality_score"],
+            "profitability_score": score_res["profitability_score"],
+            "efficiency_score": score_res["efficiency_score"],
+            "key_ratios": {
+                "ETA_%": ratios_dict.get("ETA"),
+                "ROE_%": ratios_dict.get("ROE"),
+                "ROA_%": ratios_dict.get("ROA"),
+                "NIM_%": ratios_dict.get("NIM"),
+                "CIR_%": ratios_dict.get("CIR"),
+                "LDR_%": ratios_dict.get("LDR"),
+            }
+        })
+
+    # Sắp xếp theo điểm tổng hợp giảm dần
+    ranking.sort(key=lambda x: x["financial_health_score"], reverse=True)
+    return {"period_id": period_id, "ranking": ranking}
