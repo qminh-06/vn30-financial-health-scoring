@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+# Đảm bảo luôn tìm thấy các package nội bộ (như db) dù chạy từ bất cứ đâu
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from vnstock import Finance
 from vnstock import register_user
 import pandas as pd
