@@ -47,11 +47,12 @@ RATIO_CATALOG = [
     {"ratio_code": "GROWTH_QOQ",  "ratio_name_vn": "Tăng trưởng TTS QoQ",      "unit": "%", "category": "ASSET_QUALITY",    "source_type": "BCTC"},
     {"ratio_code": "ACCRUED_INT", "ratio_name_vn": "Lãi dự thu/Tổng tài sản",  "unit": "%", "category": "ASSET_QUALITY",    "source_type": "BCTC"},
     {"ratio_code": "CIR",         "ratio_name_vn": "Chi phí/Thu nhập",         "unit": "%", "category": "EFFICIENCY",       "source_type": "BCTC"},
-    {"ratio_code": "ROA",         "ratio_name_vn": "ROA",                     "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
-    {"ratio_code": "ROE",         "ratio_name_vn": "ROE",                     "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
-    {"ratio_code": "NIM",         "ratio_name_vn": "NIM",                     "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
-    {"ratio_code": "YOEA",        "ratio_name_vn": "YOEA",                    "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
-    {"ratio_code": "COF",         "ratio_name_vn": "COF",                     "unit": "%", "category": "FUNDING",          "source_type": "BCTC"},
+    {"ratio_code": "ROA",         "ratio_name_vn": "ROA (năm hóa)",            "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "ROE",         "ratio_name_vn": "ROE (năm hóa)",            "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "NIM",         "ratio_name_vn": "NIM (năm hóa)",            "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "YOEA",        "ratio_name_vn": "YOEA (năm hóa)",           "unit": "%", "category": "PROFITABILITY",    "source_type": "BCTC"},
+    {"ratio_code": "COF",         "ratio_name_vn": "COF (năm hóa, bình quân)", "unit": "%", "category": "FUNDING",          "source_type": "BCTC"},
+    {"ratio_code": "LDR",         "ratio_name_vn": "Tỷ lệ cho vay/tiền gửi",  "unit": "%", "category": "LIQUIDITY",        "source_type": "BCTC"},
     {"ratio_code": "EARNING_ASSET_RATIO", "ratio_name_vn": "Tài sản sinh lời/TTS", "unit": "%", "category": "ASSET_QUALITY", "source_type": "BCTC"},
 ]
 
@@ -67,6 +68,7 @@ COLUMN_TO_RATIO_CODE = {
     "NIM_%": "NIM",
     "YOEA_%": "YOEA",
     "COF_%": "COF",
+    "LDR_%": "LDR",
     "earning_assets_ratio_%": "EARNING_ASSET_RATIO",
 }
 STATEMENT_TYPES = {"balance_sheet": "BS", "income_statement": "IS", "cash_flow": "CF"}
