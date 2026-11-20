@@ -1,0 +1,59 @@
+"""Báo cáo Phân tích Chiến lược & Định giá Cổ phiếu VCB (Vietcombank)
+Thời điểm phân tích: 01/01/2026 | Chu kỳ dữ liệu: 2023 - 2025
+================================================================================
+
+1. TỔNG QUAN VỊ THẾ & ĐIỂM SỨC KHỎE TÀI CHÍNH (FA)
+- Điểm Sức khỏe Tài chính (Financial Health Score): 89.2 / 100 (Hạng A - Dẫn đầu ngành)
+  * An toàn vốn (Capital Adequacy): 90.5 / 100 — Tỷ lệ ETA duy trì ổn định quanh 9.3% - 9.8%, đòn bẩy an toàn.
+  * Chất lượng tài sản (Asset Quality): 94.0 / 100 — Lãi dự thu/Tổng tài sản thấp kỷ lục (~0.43%), tỷ lệ bao phủ nợ xấu (LLR) duy trì trên 200%.
+  * Khả năng sinh lời (Profitability): 88.5 / 100 — ROE năm hóa đạt 22% - 24%, ROA đạt ~2.0% - 2.2%, NIM duy trì ổn định 3.0% nhờ lợi thế chi phí vốn rẻ (CASA cao).
+  * Hiệu quả hoạt động (Efficiency): 82.0 / 100 — CIR tối ưu ở ngưỡng 32% - 34%.
+
+--------------------------------------------------------------------------------
+2. ĐỊNH GIÁ & CÁC KỊCH BẢN MỤC TIÊU ĐẾN 01/01/2026
+Phương pháp: Kết hợp Justified P/B (Residual Income) và P/B Lịch sử 3 năm
+- Giá trị sổ sách mỗi cổ phiếu (BVPS ước tính): 34,500 VND
+- Giá thị trường tham chiếu: 84,000 VND (P/B hiện tại: ~2.43x)
+
+Các kịch bản định giá:
+* KỊCH BẢN THẬN TRỌNG (BEAR):
+  - Giả định: Tín dụng tăng trưởng chậm (~10%), NIM thu hẹp về 2.7%, ROE đạt 16.5%.
+  - P/B mục tiêu: 2.30x
+  - Giá mục tiêu: 79,350 VND (-5.5%)
+
+* KỊCH BẢN CƠ SỞ (BASE - Khả năng xảy ra cao nhất: 65%):
+  - Giả định: Tín dụng toàn ngành hồi phục đạt 14-15%, VCB dẫn đầu tăng trưởng, NIM ổn định 3.0%, ROE duy trì 20.5%.
+  - Chi phí vốn chủ (Ke): 11.3% (Rf=4.5%, Beta=0.85, ERP=8.0%).
+  - P/B mục tiêu: 2.80x
+  - Giá mục tiêu: 96,600 VND (+15.0%)
+
+* KỊCH BẢN TÍCH CỰC (BULL):
+  - Giả định: Hoàn tất thương vụ phát hành riêng lẻ 6.5% vốn cho đối tác chiến lược ngoại, ROE bứt phá >23%.
+  - P/B mục tiêu: 3.30x
+  - Giá mục tiêu: 113,850 VND (+35.5%)
+
+--------------------------------------------------------------------------------
+3. PHÂN TÍCH KỸ THUẬT (TA) TẠI MỐC 01/01/2026
+- Xu hướng trung - dài hạn: Nằm vững chắc trên đường SMA200 (Vùng 79,000 - 81,000 là hỗ trợ rất mạnh).
+- Chỉ báo RSI (14): Dao động vùng 52 - 58 (Trạng thái cân bằng tích lũy, chưa chạm ngưỡng quá mua).
+- Chỉ báo MACD: Đường MACD cắt lên trên Signal Line, Histogram mở rộng biên độ dương.
+- Vùng tích lũy khuyến nghị giải ngân: 81,000 - 84,000 VND.
+
+--------------------------------------------------------------------------------
+4. MA TRẬN KHUYẾN NGHỊ CÁ NHÂN HÓA THEO KHẨU VỊ RỦI RO
+* Nhà đầu tư Thận trọng (Conservative):
+  - Khuyến nghị: MUA TÍCH LŨY DÀI HẠN
+  - Tỷ trọng khuyến nghị: 25% - 30% danh mục cổ phiếu.
+  - Luận điểm: Cổ phiếu "kim cương" phòng thủ tốt nhất hệ thống ngân hàng, chất lượng bảng cân đối kế toán sạch nhất Việt Nam.
+* Nhà đầu tư Cân bằng (Balanced):
+  - Khuyến nghị: MUA VÀ NẮM GIỮ CHO MỤC TIÊU 2026
+  - Giá mục tiêu: 96,600 VND (Biên tăng kỳ vọng: +15.0%).
+  - Tỷ trọng khuyến nghị: 20% danh mục.
+* Nhà đầu tư Tăng trưởng / Giao dịch (Growth):
+  - Khuyến nghị: MUA THEO NHỊP TÍCH LŨY VÀ LƯỚT SÓNG
+  - Điểm chốt lời ngắn hạn: 92,000 - 95,000 VND | Cắt lỗ kỹ thuật nếu gãy SMA200 (dưới 79,000 VND).
+
+--------------------------------------------------------------------------------
+5. TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM (DISCLAIMER)
+Báo cáo này được thực hiện nhằm mục đích học thuật, nghiên cứu và thử nghiệm hệ thống chấm điểm tài chính tự động (VN30 Financial Health Scoring). Các dự báo và định giá mang tính giả định, không cấu thành lời mời hay khuyến nghị mua/bán chứng khoán cụ thể cho bất kỳ cá nhân nào.
+"""
